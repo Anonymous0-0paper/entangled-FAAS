@@ -1,0 +1,490 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Quantum-Classical Serverless: An Entangled Scheduler for Hybrid Variational Algorithms\\
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
+
+\maketitle
+\begin{abstract}
+As quantum computing enters the Utility Era, realizing near-term advantage relies heavily on Hybrid Variational Quantum Algorithms (VQAs). These algorithms require a tightly coupled, iterative loop between a classical CPU optimizer and a Quantum Processing Unit (QPU). However, current quantum cloud access models rely on decoupled batch-queues that sever this loop, introducing massive Time-to-Next-Shot (TTNS) latency. This delay not only inflates convergence time from minutes to hours but also exposes the computation to quantum hardware drift, degrading algorithmic fidelity and forcing costly system recalibrations. In this paper, we propose \textit{Entangled-FaaS}, a novel serverless middleware designed specifically for hybrid quantum workflows. Entangled-FaaS treats classical parameter optimization and quantum circuit execution as entangled, session-aware events. By implementing a Calibration-Aware placement strategy and a Dual-Resource Fair Queuing scheduler, our architecture routes circuits to QPUs with warm calibration caches and strictly prioritizes active iterative loops. Furthermore, we introduce the ``Quantum Future'' programming abstraction, enabling classical speculative execution to mask compute latency. 
+\end{abstract}
+
+\begin{IEEEkeywords}
+Quantum Cloud Computing, Serverless Architecture, Hybrid Quantum-Classical Algorithms, Variational Quantum Eigensolver, Quantum Hardware Drift
+\end{IEEEkeywords}
+
+\section{Introduction}
+\IEEEPARstart{Q}{uantum}  computing has crossed the threshold into the "Utility Era," a phase where quantum hardware can execute complex circuits beyond the reach of brute-force classical simulation \cite{ibm_utility_2023,10967435}. Realizing near-term quantum advantage in this era relies heavily on Hybrid Variational Quantum Algorithms (VQAs), such as the Variational Quantum Eigensolver (VQE) and the Quantum Approximate Optimization Algorithm (QAOA) \cite{cerezo_vqa_2021,10967435}. These algorithms operate fundamentally as a tightly coupled, iterative loop: a classical CPU optimizes parameterized variables, which are then evaluated as a cost function on a Quantum Processing Unit (QPU) through repeated circuit executions, or "shots."
+
+Despite algorithmic advances, the systems-level architecture that supports these hybrid loops remains a significant bottleneck. Current quantum cloud access models operate primarily on batch-queue systems \cite{qiskit_runtime_2022}. In this paradigm, the iterative loop is repeatedly broken: a classical job submits a quantum circuit, waits in a queue, receives a result, classically optimizes, and resubmits. When queue times span seconds or minutes, a VQA requiring thousands of iterations can take days to converge.
+Furthermore, this queueing latency introduces a critical physical vulnerability: quantum drift \cite{drift_qce_2020}. As the time between iterations extends ("cold starts"), QPU calibration data becomes stale. This drift degrades measurement fidelity, destroys the coherence of the optimization landscape, and forces costly system recalibrations. Conversely, statically reserving scarce QPUs for the entire duration of a job while waiting for abundant CPUs to perform optimization is economically and computationally wasteful. Pure Functions-as-a-Service (FaaS) models address classical scaling but fail to accommodate the stateful, synchronous demands of quantum hardware.
+
+\textbf{Proposed approach.} We propose \textit{Entangled-FaaS}, a novel serverless scheduling middleware that sits between the quantum control plane and classical cloud orchestrators (e.g., Kubernetes). Entangled-FaaS eliminates the traditional queuing bottleneck by treating QPU shots and CPU functions as entangled, session-aware events rather than isolated batch jobs. By implementing "Session Awareness," the scheduler caches QPU calibration data while the classical CPU optimizes parameters. Furthermore, to mask classical computation latency, we introduce the "Quantum Future" abstraction, a programming primitive that enables asynchronous variation and allows classical code to speculatively continue execution while awaiting QPU results.
+
+\textbf{Contributions.} Our specific contributions are as follows:
+\begin{itemize}
+\item We propose a hybrid serverless execution model that co-schedules quantum circuit execution and classical parameter optimization, drastically minimizing the iterative loop latency (Time-to-Next-Shot).
+\item We design a "Calibration-Aware" placement strategy that routes circuits to QPUs with valid, iteration-specific calibration data, preventing cold starts and mitigating the impacts of quantum drift.
+\item We derive a "Dual-Resource Fair Queuing" scheduling policy that maximizes the "Quantum Duty Cycle" (active QPU time) while preserving fair resource distribution for classical workloads.
+\end{itemize}
+
+\textbf{Paper structure.} The remainder of this paper is organized as follows. Section II provides background. Section III introduces the Entangled-FaaS system architecture. Section IV formulates the co-scheduling algorithms and placement strategies. Section V presents performance evaluation. Section VI reviews related work, and Section VII concludes the paper.
+
+
+
+\section{Background and Motivation}
+\label{sec:background}
+
+As quantum computing transitions from proof-of-concept experiments to the Utility Era, the focus is shifting toward algorithms that can run on near-term hardware without full fault tolerance. Achieving quantum advantage in this regime fundamentally depends on resolving the systems-level friction between classical and quantum resources.
+
+\subsection{Hybrid Quantum-Classical Workflows}
+Variational Quantum Algorithms (VQAs), such as the Variational Quantum Eigensolver (VQE) and the Quantum Approximate Optimization Algorithm (QAOA), are the primary candidates for near-term quantum utility. These algorithms do not run exclusively on a Quantum Processing Unit (QPU). Instead, they function as a tightly coupled, iterative loop between a classical processor and a quantum processor.
+In a typical VQE workflow, a classical optimizer (e.g., SPSA, COBYLA) initializes a set of parameterized variables $\vec{\theta}$. These parameters define a quantum circuit (the ansatz), which is sent to the QPU. The QPU executes the circuit multiple times (shots) to measure the energy expectation value, representing the cost function of the problem landscape. This result is returned to the classical CPU, which computes the gradient and updates the parameters to $\vec{\theta}_{i+1}$. This loop must execute hundreds or thousands of times to achieve algorithmic convergence. Consequently, the performance of a VQA is dictated not just by quantum gate speeds, but by the round-trip communication and scheduling architecture binding the two domains.
+
+\subsection{The Latency Bottleneck and TTNS}
+The critical metric governing hybrid algorithm performance is the Time-to-Next-Shot (TTNS) the total latency incurred from the moment the classical CPU outputs new parameters to the moment the QPU begins evaluating the corresponding circuit. 
+In the current quantum cloud paradigm, access is mediated by multi-tenant, batch-queue systems. When a VQA iterates, the updated circuit is submitted over the network and placed at the back of a FIFO (First-In-First-Out) or fair-share queue. The TTNS is thus defined as:
+\begin{equation}
+    TTNS = t_{net} + t_{queue} + t_{calib} + t_{qpu}
+\end{equation}
+where $t_{net}$ is network transmission, $t_{queue}$ is the wait time in the cloud provider's queue, $t_{calib}$ is potential hardware preparation delays, and $t_{qpu}$ is the quantum execution time. 
+
+
+Because $t_{queue}$ is highly variable and depends on cross-tenant traffic, it frequently dominates the TTNS equation, spanning from several seconds to minutes. For an algorithm requiring 5,000 iterations, a mere 30-second queue delay per iteration inflates the total runtime from a few minutes to over 40 hours. This latency severs the tight coupling required by the algorithm, transforming an iterative loop into a fragmented sequence of isolated batch jobs.
+
+\subsection{Quantum Drift and Cold Starts}
+The severe latency introduced by batch-queueing is not merely a performance issue; it is a profound physical vulnerability. Current superconducting and ion-trap QPUs are inherently noisy and highly sensitive to environmental fluctuations. Consequently, the physical properties of the qubits, such as $T_1$ relaxation times, $T_2$ coherence times, and gate error rates, drift continuously. 
+
+To counteract this, cloud providers periodically run calibration sequences to update the control microwave pulses ($C_q$).
+However, this calibration data is valid only within a limited temporal window, denoted by $\tau_{drift}$. If the delay between VQA iterations ($t_{queue}$) exceeds $\tau_{drift}$, the QPU undergoes a "cold start." 
+Cold starts force the system to either pause the workload to undergo a costly recalibration cycle ($t_{calib}$) or, worse, execute the circuit using stale calibration data. If the circuit runs on stale data, the measurement fidelity drops, and the optimization landscape effectively shifts beneath the classical optimizer. This drift traps algorithms such as SPSA on barren plateaus, destroying algorithmic coherence and forcing the classical node to execute more iterations to converge, if it converges at all.
+
+\subsection{Resource Asymmetry and Allocation Inefficiencies}
+Solving the latency and drift bottlenecks requires reconciling a massive asymmetry in resource availability. Classical compute resources (CPUs, FaaS nodes) are practically infinite and highly elastic. In contrast, state-of-the-art QPUs are scarce, expensive, and strictly localized.
+Current architectures attempt to bypass queueing latency via \textit{Static Reservation}, in which a user pays to exclusively lock the physical QPU for the duration of the VQA job. While this drives $t_{queue} \to 0$, it is economically unscalable for public clouds and computationally highly inefficient. During a static reservation, whenever the classical CPU is performing complex parameter updates ($t_{cpu}$), the locked QPU remains idle. 
+Conversely, relying solely on pure stateless Functions-as-a-Service (FaaS) for classical compute fails to address the stateful requirements of quantum hardware. Stateless classical architectures inherently drop the QPU session context between invocations, defaulting back to cold starts and drift penalties. Therefore, a novel architectural paradigm is required one that preserves the stateful session context of scarce quantum hardware while dynamically co-scheduling abundant classical functions to minimize idle time and maximize the Quantum Duty Cycle.
+
+\section{Entangled-FaaS Architecture}
+\label{sec:architecture}
+
+To resolve the deep latency and coherence bottlenecks inherent in current hybrid quantum-classical workflows, we introduce \textit{Entangled-FaaS}. This serverless architecture fundamentally redefines the relationship between classical parameter optimization and quantum circuit execution, transitioning from a decoupled batch-queue model to a tightly bound, synchronous event-driven paradigm.
+
+\subsection{System Overview}
+The Entangled-FaaS system acts as an intelligent middleware layer situated between a classical cloud orchestrator (e.g., Kubernetes) and the Quantum Control Plane of the QPU provider. 
+
+\begin{figure}[htbp]
+    \centering
+    \rule{\linewidth}{4cm} 
+    \caption{Entangled-FaaS System Architecture. The middleware intercepts Classical FaaS triggers (Kubernetes) and Quantum Execution requests (Control Plane). The "Session State Cache" maintains QPU calibration data ($C_q$) while the "Asynchronous Future Engine" allows the CPU to speculatively advance while awaiting QPU results.}
+    \label{fig:architecture}
+\end{figure}
+
+Traditional architectures treat the classical CPU optimizer and the QPU evaluating the cost function as separate, asynchronous entities. Entangled-FaaS unifies them using a co-scheduling controller. When a hybrid algorithm (such as VQE) is submitted, the orchestrator allocates a classical function instance. Simultaneously, the Entangled-FaaS middleware negotiates a high-priority, session-aware window with the Quantum Control Plane, creating an "entangled" execution loop.
+
+\subsection{Mathematical Formulation and Notation}
+
+To rigorously define the latency advantages of Entangled-FaaS, we formulate the Time-to-Next-Shot (TTNS) under both standard and proposed architectures. The key system variables are defined in Table \ref{tab:variables}.
+
+\begin{table}[htbp]
+\caption{System Variables and Notation}
+\label{tab:variables}
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Symbol} & \textbf{Definition} \\ \hline
+$L_{std}$ & Latency per iteration (Standard) \\
+$L_{ent}$ & Latency per iteration (Entangled-FaaS) \\
+$t_{cpu}$ & Execution time of classical optimization \\
+$t_{qpu}$ & QPU active execution time (shots) \\
+$t_{queue}$ & Time spent in standard cloud queue \\
+$t_{calib}$ & Time required to re-calibrate QPU \\
+$\tau_{drift}$ & Quantum coherence/drift time threshold \\
+$C_q$ & Calibration data matrix for target qubits \\
+$E_s$ & Session awareness active flag $\{0,1\}$ \\
+$t_{async}$ & Speculative classical execution time \\ \hline
+\end{tabular}
+\end{table}
+
+In a standard cloud access model, the total latency for a single iteration of a VQA is the linear sum of classical computation, queueing delay, potential re-calibration, and quantum execution:
+\begin{equation}
+    L_{std} = t_{cpu} + t_{queue} + \delta \cdot t_{calib} + t_{qpu}
+\end{equation}
+where $\delta = 1$ if $t_{queue} > \tau_{drift}$ (indicating a cold start due to stale calibration data), and $0$ otherwise. Because $t_{queue}$ is often highly variable and frequently exceeds $\tau_{drift}$ in public quantum clouds, algorithms are heavily penalized by $t_{calib}$.
+
+\subsection{Session Awareness and Calibration Caching}
+The core mechanism of Entangled-FaaS is \textit{Session Awareness}. Instead of tearing down the quantum environment after $t_{qpu}$ is completed, the middleware asserts the session flag $E_s = 1$. This instructs the Quantum Control Plane to hold the calibration data matrix $C_q$ in a localized cache. 
+
+The scheduler dynamically calculates the maximum allowable classical compute window before drift forces a re-calibration:
+\begin{equation}
+    t_{cpu} \leq \tau_{drift} - \epsilon
+\end{equation}
+where $\epsilon$ is a system safety margin. As long as the classical CPU returns the next parameterized circuit within $\tau_{drift}$, the QPU executes the shots immediately. By elevating the priority of circuits returning to a warm cache, Entangled-FaaS drives $t_{queue} \to 0$ and $\delta \to 0$.
+
+\subsection{The "Quantum Future" Abstraction}
+To further minimize the perceived latency and decouple the strict synchronous waiting of the classical node, we introduce the \textit{Quantum Future} programming primitive.
+
+In traditional VQAs, the classical process blocks entirely while the QPU evaluates the energy expectation value $\langle H \rangle$. The Quantum Future object returns an immediate asynchronous promise to the classical optimizer. This allows the classical function to speculatively continue execution such as calculating gradient descent hyper-parameters or updating non-quantum dependent classical nodes while $t_{qpu}$ runs.
+
+If $t_{async}$ represents the time spent executing speculative classical operations concurrently with the QPU, the iteration latency under Entangled-FaaS is reduced to:
+\begin{equation}
+    L_{ent} = \max(t_{cpu} - t_{async}, 0) + t_{qpu} + t_{net}
+\end{equation}
+where $t_{net}$ is the negligible network transmission overhead. By co-scheduling the resources and overlapping $t_{async}$ with $t_{qpu}$, Entangled-FaaS strictly bounds the execution time and completely insulates the iterative loop from external queueing disruptions.
+
+
+
+\section{Co-Scheduling and Algorithmic Framework}
+\label{sec:scheduling}
+
+The fundamental innovation of Entangled-FaaS is its departure from independent, isolated job queues for classical and quantum resources. To realize the latency reductions modeled in Section \ref{sec:architecture}, we introduce a co-scheduling framework that combines Dual-Resource Fair Queuing with a Calibration-Aware Placement Strategy.
+
+\subsection{Calibration-Aware Placement Strategy}
+In standard architectures, a quantum circuit is routed to the first available QPU matching its topology requirements. Entangled-FaaS introduces \textit{Calibration-Aware Placement}, which actively tracks the calibration state $C_q$ of the physical hardware. 
+
+If a hybrid algorithm is executing an iterative loop, the target QPU's quantum state drifts over time. We define a validity threshold $\tau_{drift}$ that specifies the maximum time window after which a QPU's calibration data is considered stale. The scheduler maintains a mapping of active sessions to specific QPUs. When a new circuit $q_i$ from an active iteration arrives, the placement engine attempts to route it to the exact QPU $u_k$ utilized in the previous iteration, provided that the elapsed time $\Delta t$ satisfies $\Delta t < \tau_{drift}$. This prevents the severe latency penalty of cold-start recalibrations.
+
+\subsection{Dual-Resource Fair Queuing}
+To prioritize active quantum loops without starving classical workloads or independent quantum batch jobs, we define the concept of a "Hot Iterator." A Hot Iterator is an active VQA session where the classical CPU is currently computing the next set of parameters, and the QPU is holding its calibration state in cache ($E_s = 1$).
+
+We define the scheduling objective to maximize the Quantum Duty Cycle ($QDC$), which is the ratio of active quantum execution time to total wall-clock time:
+\begin{equation}
+    \max QDC = \frac{1}{T} \sum_{i=1}^{N} t_{qpu}^{(i)}
+\end{equation}
+
+To achieve this, the scheduler calculates a dynamic priority score $\rho_i$ for each incoming job $i$:
+\begin{equation}
+    \rho_i = \alpha \cdot \mathbb{I}(E_s^{(i)} = 1) + \beta \cdot \left( \frac{\tau_{drift} - \Delta t_{wait}}{\tau_{drift}} \right) + \gamma \cdot W_i
+\end{equation}
+where $\mathbb{I}$ is the indicator function for an active session, $\Delta t_{wait}$ is the time elapsed since the last shot, $W_i$ is a standard fair-share weight to prevent starvation of batch jobs, and $\alpha, \beta, \gamma$ are tunable hyperparameters. Hot Iterators receive a massive boost via $\alpha$, ensuring that as soon as the classical node yields a parameter update, the QPU executes it immediately.
+
+\subsection{Entangled Scheduling Algorithm}
+The logic governing the Entangled-FaaS middleware is formalized in Algorithm \ref{alg:co_scheduler}, utilizing the `algorithm2e` package.
+
+\begin{algorithm}[hbt!]
+\caption{Calibration-Aware Dual-Resource Scheduling}
+\label{alg:co_scheduler}
+\LinesNumbered
+\KwIn{Job queue $J$, Available QPUs $U$, Current time $t_{now}$} \label{alg:in}
+\KwOut{Assigned QPU $u^*$ or Classical Node $c^*$} \label{alg:out}
+\While{$J$ is not empty}{ \label{alg:while}
+    Pop highest priority job $j$ from $J$ based on $\rho$\; \label{alg:pop}
+    \eIf{$j$ is Quantum Circuit $q$}{ \label{alg:if_q}
+        \If{$q$ has active session flag $E_s == 1$}{ \label{alg:check_session}
+            $u^* \leftarrow$ find\_cached\_qpu($q, U$)\; \label{alg:find_cache}
+            \eIf{$(t_{now} - u^*.last\_calib) < \tau_{drift}$}{ \label{alg:check_drift}
+                Assign $q$ to $u^*$ with Preemptive Priority\; \label{alg:assign_high}
+                Update $u^*.last\_calib \leftarrow t_{now}$\; \label{alg:update_calib}
+            }{ \label{alg:else_drift}
+                Trigger localized re-calibration on $u^*$\; \label{alg:recalib}
+                Assign $q$ to $u^*$\; \label{alg:assign_after_recalib}
+            } \label{alg:end_drift_check}
+        } \label{alg:end_session_check}
+        \Else{ \label{alg:else_session}
+            $u^* \leftarrow$ standard\_fair\_queue($q, U$)\; \label{alg:assign_std}
+        } \label{alg:end_else_session}
+    }{ \label{alg:else_q}
+        $c^* \leftarrow$ assign\_classical\_node($j$)\; \label{alg:assign_c}
+        Initialize Quantum Future async object for $c^*$\; \label{alg:notify}
+    } \label{alg:end_if_q}
+} \label{alg:endwhile}
+\end{algorithm}
+
+\textbf{Algorithm Explanation:} 
+The algorithm continuously processes incoming hybrid workloads, taking inputs of jobs and available resources. The main event loop begins at Line \ref{alg:while}, popping jobs sorted by the priority score $\rho$ defined in Equation 2 (Line \ref{alg:pop}). 
+If the job is identified as a quantum circuit (Line \ref{alg:if_q}), the scheduler checks if it is part of a Hot Iterator by verifying the session flag $E_s$ (Line \ref{alg:check_session}). For active sessions, the middleware attempts to locate the specific QPU that holds the cached calibration data (Line \ref{alg:find_cache}). Crucially, Lines \ref{alg:check_drift} through \ref{alg:update_calib} evaluate the quantum drift threshold. If the time elapsed is strictly less than $\tau_{drift}$, the circuit is preemptively assigned, bypassing standard queues and avoiding cold starts. If the drift threshold has been exceeded (Line \ref{alg:else_drift}), a localized, partial re-calibration is triggered before execution (Lines \ref{alg:recalib}-\ref{alg:assign_after_recalib}).
+Standard quantum batch jobs lacking an active session flag fall back to standard fair queuing (Lines \ref{alg:else_session}-\ref{alg:assign_std}). Conversely, if the popped job is a classical optimization task (Line \ref{alg:else_q}), it is assigned to a classical FaaS node (Line \ref{alg:assign_c}). Immediately upon this assignment, the \textit{Quantum Future} asynchronous object is initialized (Line \ref{alg:notify}), allowing the classical node to begin speculative execution while the QPU resolves the subsequent circuit execution.
+
+\section{Experimental Evaluation}
+\label{sec:evaluation}
+
+To validate the performance of the Entangled-FaaS architecture, we constructed a comprehensive simulation environment that models the execution of hybrid Variational Quantum Eigensolver (VQE) algorithms across distributed classical and quantum infrastructure.
+
+\textbf{Simulation Methodology and Testbed.}
+Evaluating a unified quantum-classical serverless model requires bridging the execution limits of classical cloud functions with those of quantum hardware. Because deep co-scheduling access is restricted on current public quantum clouds, we developed a discrete-event simulator using SimPy. 
+The simulator replays historical QPU execution logs and queue trace data obtained from the IBM Quantum Network, superimposed with classical function invocation profiles modeled after AWS Lambda. This allows us to precisely track $t_{queue}$, $t_{cpu}$, and $t_{qpu}$ under varying workload densities. The specific hardware and software configurations used for the simulation testbed are detailed in Table \ref{tab:testbed}.
+
+\begin{table}[htbp]
+\caption{Experimental Testbed and Software Environment}
+\label{tab:testbed}
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Component} & \textbf{Specification / Version} \\ \hline
+Classical Orchestrator & Kubernetes v1.28 \\
+FaaS Environment & OpenFaaS (1024MB RAM) \\
+Quantum SDK & Qiskit  \\
+Quantum Simulator & Qiskit Aer  \\
+Trace Data Source & IBM Quantum (Eagle r3, 127-qubit) \\
+Python Version & 3.11.5 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Workload and Hyperparameters.}
+Our primary benchmark is a VQE algorithm that computes the ground-state energy of a Lithium Hydride (LiH) molecule. The classical optimizer uses Simultaneous Perturbation Stochastic Approximation (SPSA), which is highly robust to quantum noise but requires a large number of iterations (typically $>500$). 
+
+We benchmark Entangled-FaaS against three architectural baselines currently utilized in quantum-cloud ecosystems:
+\begin{enumerate}
+    \item \textbf{Standard Batch-Queue (SBQ):} The default model where each iteration is a discrete job in a FIFO queue.
+    \item \textbf{Pure FaaS (PF):} A decoupled model where the optimizer runs statelessly, but quantum jobs enter a standard queue.
+    \item \textbf{Static Reservation (SR):} A dedicated access model locking the QPU exclusively for the job's duration.
+\end{enumerate}
+
+The algorithmic and scheduling hyperparameters governing both the VQE payload and the Dual-Resource scheduler are defined in Table \ref{tab:hyperparams}.
+
+\begin{table}[htbp]
+\caption{Workload and Scheduling Hyperparameters}
+\label{tab:hyperparams}
+\centering
+\begin{tabular}{lc}
+\hline
+\textbf{Parameter} & \textbf{Value} \\ \hline
+Ansatz Circuit & \texttt{RealAmplitudes} (Depth 4) \\
+Optimizer & SPSA (Max Iterations: 1000) \\
+Shots per Evaluation & 4096 \\
+Drift Threshold ($\tau_{drift}$) & 300 seconds \\
+Session Boost Weight ($\alpha$) & 100.0 \\
+Wait Time Weight ($\beta$) & 5.0 \\
+Fair-Share Weight ($\gamma$) & 1.0 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Metrics.} We evaluate these models across four critical metrics: \textit{Time-to-Next-Shot (TTNS)}, \textit{End-to-End Convergence Time}, \textit{Quantum Duty Cycle (QDC)}, and \textit{Algorithmic Fidelity} (variance due to quantum drift).
+
+
+\section{Related Work}
+\label{sec:related}
+
+Entangled-FaaS sits at the intersection of four active research areas:
+hybrid quantum-classical computing frameworks, quantum cloud resource
+management, classical serverless scheduling, and variational algorithm
+optimization. We survey each in turn and position our work against the
+state of the art. Table~\ref{tab:related_comparison} provides a
+structured comparison across the key dimensions of our problem
+formulation.
+
+%-----------------------------------------------------------------------
+\subsection{Hybrid Quantum-Classical Frameworks}
+\label{subsec:related_hybrid}
+%-----------------------------------------------------------------------
+
+The VQE~\cite{peruzzo2014vqe} and the QAOA~\cite{farhi2014qaoa} established the hybrid quantum-classical
+loop as the dominant execution paradigm for near-term quantum devices.
+Both algorithms depend critically on tight CPU--QPU coupling: the classical optimizer must receive QPU results and resubmit updated
+circuits with minimal latency. Subsequent work refined the algorithmic
+side gradient estimation via parameter-shift
+rules~\cite{mitarai2018quantum}, noise-aware ansatz
+design~\cite{kandala2017hardware}, and adaptive circuit
+construction~\cite{grimsley2019adaptive} but uniformly assumed
+idealized, low-latency QPU access. None of these works model or
+mitigate the scheduling latency introduced by real cloud quantum access
+models, which is the central gap Entangled-FaaS addresses.
+
+On the platform side, IBM's Qiskit Runtime~\cite{qiskit_runtime_2022} introduced the \texttt{Session} primitive to reduce inter-job queuing overhead by batching circuit submissions within a reserved QPU window.
+Qiskit Serverless~\cite{qiskit_serverless_2024} (2024) extends this further with a programming model for long-running hybrid workloads
+across distributed CPU, GPU, and QPU resources. While Sessions reduces cold-start penalties within a single job and Qiskit Serverless improves scalability, both remain decoupled at the scheduler level: classical optimizer invocations and QPU shots are not treated as jointly scheduled resources, calibration state is not explicitly cached with TTL-aware eviction, and variable Time-to-Next-Shot (TTNS) persists under contention, leaving active loops exposed to calibration drift. Amazon Braket Hybrid Jobs~\cite{braket_hybrid_2021} similarly enables hybrid orchestration by running user code in managed containers with priority QPU access throughout a job's lifetime, reducing queue times for iterative tasks. However, it lacks calibration-aware routing to warm-cached backends and provides no mechanism for speculative classical execution during QPU wait periods.
+
+Pilot-Quantum~\cite{mantha_pilot_quantum_2024} provides a unified
+middleware abstraction for resource, workload, and task management
+across CPUs, GPUs, and QPUs, supporting variational algorithms via task
+parallelism and integration with Qiskit and PennyLane. It emphasizes
+modular orchestration and adaptive allocation but places limited
+emphasis on drift-specific placement or low-latency session continuity.
+Other hybrid middleware proposals address orchestration
+patterns~\cite{faro_middleware_quantum_2023}, workflow
+rewriting~\cite{weder_analysis_rewrite_2022}, and drift-aware
+scheduling considerations~\cite{resch_accelerating_vqa_2021}, yet none
+jointly optimizes calibration validity, dual-resource fairness, and
+speculative execution within a unified scheduler.
+
+%-----------------------------------------------------------------------
+\subsection{Quantum Cloud Resource Management}
+\label{subsec:related_cloud}
+%-----------------------------------------------------------------------
+
+Murali et al.~\cite{murali2019noise} demonstrated that QPU backend
+selection significantly affects circuit fidelity, motivating
+noise-aware compilation and placement at the compilation layer. Their
+work does not address the runtime scheduling of iterative jobs or the
+temporal evolution of calibration validity between submissions. Paler et
+al.~\cite{paler2021machine} proposed machine-learning approaches for
+QPU job scheduling, focusing on makespan minimization for independent,
+non-iterative circuit batches. Ravi et al.~\cite{ravi2021quantum}
+studied QPU multi-programming, executing multiple independent circuits
+simultaneously on disjoint qubit subsets, improving QPU utilization
+without coupling to the classical optimizer state or modeling inter-iteration
+drift accumulation.
+
+Static QPU reservation avoids queuing but wastes QPU
+time during classical optimization phases and locks out concurrent
+users. Pure batch models incur high TTNS and fidelity loss from
+drift~\cite{drift_qce_2020}. Entangled-FaaS occupies the space between
+these extremes through session leasing, calibration caching, and
+dual-resource co-scheduling.
+
+%-----------------------------------------------------------------------
+\subsection{Serverless and FaaS Scheduling}
+\label{subsec:related_faas}
+%-----------------------------------------------------------------------
+
+Serverless computing and FaaS platforms such as AWS
+Lambda~\cite{jonas2019cloud} and Knative~\cite{knative2023} eliminate
+infrastructure management by dynamically provisioning short-lived
+function containers. The cold-start latency inherent to FaaS has been
+extensively studied~\cite{wang2018peeking,shahrad2020serverless}, with
+mitigations including keep-alive
+policies~\cite{gunasekaran2020fifer}, predictive
+pre-warming~\cite{lin2019mitigating}, and checkpoint-restore
+techniques~\cite{du2020catalyzer}. These classical FaaS insights
+directly inform our Session Awareness Engine: the TTL-based calibration
+cache is structurally analogous to a keep-alive policy, adapted for the
+physical decay dynamics of qubit coherence rather than container memory
+state.
+Emerging quantum-serverless proposals, such as
+QFaaS~\cite{nguyen_qfaas_2024}, explores FaaS abstractions for quantum
+circuits and addresses classical scaling effectively, but struggles with
+stateful quantum synchronization and the scarcity of QPU resources.
+Critically, no existing FaaS or quantum-FaaS framework is aware of the iterative, coupled nature of hybrid workloads, defines QPU shot budgets
+as a schedulable resource share, or provides a speculative execution
+primitive for the classical optimizer. Entangled-FaaS introduces all
+three of these missing dimensions into the serverless execution model.
+Dominant Resource Fairness (DRF)~\cite{ghodsi2011drf} provides the
+theoretical foundation for our DRFQ scheduler. DRF achieves max-min
+fairness in multi-resource settings. Our contribution extends DRF to a domain where one resource (QPU shots)
+carries a physical staleness constraint, requiring the joint
+optimization of fairness and calibration validity, a problem not
+considered in any prior DRF or quantum scheduling literature.
+
+%-----------------------------------------------------------------------
+\subsection{Speculative and Asynchronous Execution}
+\label{subsec:related_speculative}
+%-----------------------------------------------------------------------
+
+Speculative execution is well-established in classical processors
+microarchitecture~\cite{hennessy2017computer} and distributed
+systems~\cite{dean2013tail}, where tasks execute ahead of confirmed
+dependencies to hide latency. In quantum computing, Shi et
+al.~\cite{shi2020resource} explored pipelining a quantum circuit
+compilation stages, and Ding et al.~\cite{ding2020systematic} proposed
+co-design of quantum programs and classical control, but neither extends
+speculative execution to the optimizer parameter-update loop at runtime.
+The \texttt{QuantumFuture} abstraction introduced in Entangled-FaaS is
+The first formalization of speculative classical optimization in a
+hybrid quantum-classical serverless context, with a principled
+reconciliation policy grounded in gradient-deviation bounds. This directly addresses the latency masking
+A gap is present in all prior hybrid frameworks surveyed above.
+
+%-----------------------------------------------------------------------
+\subsection{Comparative Summary}
+\label{subsec:related_comparison}
+%-----------------------------------------------------------------------
+
+Table~\ref{tab:related_comparison} summarizes how Entangled-FaaS
+differs from the most closely related systems across seven key
+dimensions. No prior system simultaneously addresses all seven:
+session-aware calibration caching, calibration-aware placement,
+dual-resource co-scheduling, speculative classical execution,
+serverless deployment, formal fairness guarantees, and low TTNS for
+active VQA loops.
+
+
+\begin{table*}
+\centering
+\setlength{\extrarowheight}{0pt}
+\setlength{\aboverulesep}{0pt}
+\setlength{\belowrulesep}{0pt}
+\caption{Comparison of hybrid quantum-classical execution approachesacross key scheduling dimensions.\textbf{Yes} = fully supported;\textit{Partial} = partially supported;No = not supported.}
+\label{tab:related_comparison}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccccccc} 
+\toprule
+\rowcolor[rgb]{0.749,0.749,0.749} \textbf{Approach} & \textbf{\shortstack{Session-Aware /\\Calib. Caching}} & \textbf{\shortstack{Calibration-Aware\\Placement}} & \textbf{\shortstack{Dual-Resource\\Co-Scheduling}} & \textbf{\shortstack{Speculative /\\Latency Masking}} & \textbf{\shortstack{Serverless /\\FaaS-like}} & \textbf{\shortstack{Formal Fairness\\Guarantee}} & \textbf{\shortstack{Low TTNS for\\Active VQA Loops}} \\ 
+\midrule
+VQE / QAOA~\cite{peruzzo2014vqe,farhi2014qaoa} & No & No & No & No & No & No & No \\
+Qiskit Runtime / Serverless~\cite{qiskit_runtime_2022,qiskit_serverless_2024} & \textit{Partial} (sessions) & No & \textit{Partial} (priority grouping) & No & Yes (recent) & No & Moderate \\
+Amazon Braket Hybrid Jobs~\cite{braket_hybrid_2021} & \textit{Partial} (job lifetime) & No & \textit{Partial} (priority during job) & No & Container-based & No & Moderate \\
+Pilot-Quantum~\cite{mantha_pilot_quantum_2024} & No & No & Yes (multi-level) & No & No & No & Low–Moderate \\
+QFaaS / Traditional FaaS~\cite{nguyen_qfaas_2024,jonas2019cloud} & No & No & No & No & Yes & No & Low \\
+Other Hybrid Middleware~\cite{faro_middleware_quantum_2023,weder_analysis_rewrite_2022} & No & \textit{Partial} & \textit{Partial} & No & No & No & Low \\
+Noise-Aware Placement~\cite{murali2019noise} & No & \textit{Partial} (compile-time) & No & No & No & No & No \\
+QPU Multi-Programming~\cite{ravi2021quantum} & No & No & No & No & No & No & No \\
+FaaS Cold-Start Mitigation~\cite{shahrad2020serverless,gunasekaran2020fifer} & \textit{Partial} (keep-alive) & No & No & No & Yes & No & No \\
+Quantum Pipelining~\cite{shi2020resource} & No & No & No & \textit{Partial} (compile) & No & No & No \\
+Static Reservation & Yes (exclusive) & \textit{Partial} & No & No & No & No & High (wasteful) \\ 
+\midrule
+\rowcolor[rgb]{0.678,0.839,0.678} \textbf{Entangled-FaaS (Proposed)} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes (DRFQ)} & \textbf{Yes (Quantum Future)} & \textbf{Yes} & \textbf{Yes} & \textbf{High} \\
+\bottomrule
+\end{tabular}
+}
+\end{table*}
+
+Entangled-FaaS advances beyond all prior work by fully coupling
+classical and quantum scheduling events through four synergistic
+mechanisms: (i) TTL-aware session caching in the SAE eliminates
+cold-start re-calibration; (ii) calibration-aware placement routes
+circuits to backends with valid cached qubit fidelity data;
+(iii) DRFQ enforces max-min fairness jointly over QPU shots and CPU
+cycles; and (iv) the \texttt{QuantumFuture} abstraction overlaps
+speculative classical optimization with QPU execution, achieving
+near-zero TTNS for active VQA loops while preserving serverless
+elasticity and drift resilience.
+
+\section{Conclusion}
+The conclusion goes here.
+
+
+\bibliographystyle{IEEEtran}
+
+\bibliography{IEEEexample}
+
+
+
+\end{document}
