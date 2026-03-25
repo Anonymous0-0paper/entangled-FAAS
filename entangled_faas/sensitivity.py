@@ -55,7 +55,7 @@ def _run_one_point(
     tracker         = MetricsTracker(mode=config.MODE_ENTANGLED, n_qpus=config.N_QPU)
 
     scheduler = EntangledFaaSScheduler(
-        env=env, quantum_cloud=quantum_cloud, tracker=tracker,
+        env=env, quantum_cloud=quantum_cloud, classical_cloud=classical_cloud, tracker=tracker,
         mode=config.MODE_ENTANGLED, rng=rng,
         alpha=alpha, beta=beta, gamma=gamma, tau_drift=tau_drift,
     )

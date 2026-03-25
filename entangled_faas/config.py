@@ -9,12 +9,14 @@ Variable names mirror the mathematical notation in the paper exactly.
 MODE_BASELINE           = "Standard Batch-Queue (SBQ)"
 MODE_PURE_FAAS          = "Pure FaaS (PF)"
 MODE_STATIC_RESERVATION = "Static Reservation (SR)"
+MODE_PILOT_QUANTUM      = "Pilot-Quantum (PQ)"
 MODE_ENTANGLED          = "Entangled-FaaS"
 
 ALL_MODES = [
     MODE_BASELINE,
     MODE_PURE_FAAS,
     MODE_STATIC_RESERVATION,
+    MODE_PILOT_QUANTUM,
     MODE_ENTANGLED,
 ]
 
@@ -23,6 +25,7 @@ MODE_LABELS = {
     MODE_BASELINE:           "SBQ",
     MODE_PURE_FAAS:          "PF",
     MODE_STATIC_RESERVATION: "SR",
+    MODE_PILOT_QUANTUM:      "PQ",
     MODE_ENTANGLED:          "EFaaS",
 }
 
@@ -30,6 +33,7 @@ MODE_COLORS = {
     MODE_BASELINE:           "#d62728",   # Red
     MODE_PURE_FAAS:          "#ff7f0e",   # Orange
     MODE_STATIC_RESERVATION: "#1f77b4",   # Blue
+    MODE_PILOT_QUANTUM:      "#9467bd",   # Purple
     MODE_ENTANGLED:          "#2ca02c",   # Green
 }
 
@@ -50,6 +54,8 @@ epsilon:   float = 10.0    # Safety margin ε: t_cpu ≤ τ_drift − ε
 # ── Pure FaaS — container cold-start window ──────────────────────────────────
 t_faas_coldstart_min: float = 2.0   # minimum container init time (s)
 t_faas_coldstart_max: float = 8.0   # maximum container init time (s)
+t_pilot_init:         float = 2.0   # Pilot-Quantum startup overhead (s)
+t_pilot_overhead:     float = 0.5   # Pilot-Quantum middleware task latency (s)
 
 # ── Quantum Execution Parameters (Table II) ──────────────────────────────────
 shots:         int   = 4096
@@ -63,6 +69,8 @@ t_qpu_base:  float = 2.0
 t_cpu:       float = 1.5
 t_async:     float = 0.8    # Speculative classical work (Quantum Future)
 t_queue_base:float = 15.0   # Base queue delay for SBQ/PF
+t_queue_mu:    float = 3.5    # ~33s mean in log space
+t_queue_sigma: float = 0.8    # high variance
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 N_QPU:       int = 3
@@ -91,6 +99,30 @@ import os as _os
 _BASE = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 OUTPUT_DIR  = _os.path.join(_BASE, "output")
 FIGURES_DIR = _os.path.join(_BASE, "figures")
+CIRCUITS_DIR = _os.path.join(_BASE, "circuits")
+
+# ── Complexity Levels ─────────────────────────────────────────────────────────
+LEVEL_SIMPLE  = "Simple (BV-4q)"
+LEVEL_MEDIUM  = "Medium (ESU2-6q)"
+LEVEL_COMPLEX = "Complex (ESU2-8q)"
+
+# Extra complex benchmark circuits (all parameterized, hardware-relevant ansatze)
+LEVEL_COMPLEX_EFFSU2_10Q_R6_FULL   = "complex_efficientsu2_10q_r6_full"
+LEVEL_COMPLEX_EFFSU2_12Q_R5_LINEAR = "complex_efficientsu2_12q_r5_linear"
+LEVEL_COMPLEX_REALAMP_10Q_R7       = "complex_realamplitudes_10q_r7_linear"
+LEVEL_COMPLEX_TWOLOCAL_10Q_R6_CZ   = "complex_twolocal_10q_r6_cz"
+LEVEL_COMPLEX_TWOLOCAL_12Q_R5_CX   = "complex_twolocal_12q_r5_cx"
+
+ALL_LEVELS = [
+    LEVEL_SIMPLE,
+    LEVEL_MEDIUM,
+    LEVEL_COMPLEX,
+    LEVEL_COMPLEX_EFFSU2_10Q_R6_FULL,
+    LEVEL_COMPLEX_EFFSU2_12Q_R5_LINEAR,
+    LEVEL_COMPLEX_REALAMP_10Q_R7,
+    LEVEL_COMPLEX_TWOLOCAL_10Q_R6_CZ,
+    LEVEL_COMPLEX_TWOLOCAL_12Q_R5_CX,
+]
 
 # ── Sensitivity analysis parameter grids ─────────────────────────────────────
 SENSITIVITY_GRIDS = {

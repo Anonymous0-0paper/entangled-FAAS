@@ -60,10 +60,11 @@ class QPU:
     sessions: Dict[str, float] = field(default_factory=dict)
     total_active_time: float = 0.0
     recalib_count: int = 0
+    expected_completion: float = 0.0
 
     def __post_init__(self) -> None:
         # One quantum circuit can run at a time on a physical QPU
-        self.resource = simpy.Resource(self.env, capacity=1)
+        self.resource = simpy.PreemptiveResource(self.env, capacity=1)
         # Initialise calibration timestamp to the simulation start time
         self.last_calib = self.env.now
 
@@ -201,10 +202,9 @@ class QuantumCloud:
 
     def least_loaded_qpu(self) -> QPU:
         """
-        Return the QPU with the shortest request queue — used as a
-        fallback when all QPUs are busy.
+        Return the QPU with the shortest expected completion time.
         """
-        return min(self.qpus, key=lambda q: len(q.resource.queue))
+        return min(self.qpus, key=lambda q: q.expected_completion)
 
     @property
     def total_active_time(self) -> float:
