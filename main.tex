@@ -55,7 +55,7 @@ email address or ORCID}
 
 \maketitle
 \begin{abstract}
-As quantum computing enters the Utility Era, realizing near-term advantage relies heavily on Hybrid Variational Quantum Algorithms (VQAs). These algorithms require a tightly coupled, iterative loop between a classical CPU optimizer and a Quantum Processing Unit (QPU). However, current quantum cloud access models rely on decoupled batch-queues that sever this loop, introducing massive Time-to-Next-Shot (TTNS) latency. This delay not only inflates convergence time from minutes to hours but also exposes the computation to quantum hardware drift, degrading algorithmic fidelity and forcing costly system recalibrations. In this paper, we propose \textit{Entangled-FaaS}, a novel serverless middleware designed specifically for hybrid quantum workflows. Entangled-FaaS treats classical parameter optimization and quantum circuit execution as entangled, session-aware events. By implementing a Calibration-Aware placement strategy and a Dual-Resource Fair Queuing scheduler, our architecture routes circuits to QPUs with warm calibration caches and strictly prioritizes active iterative loops. Furthermore, we introduce the ``Quantum Future'' programming abstraction, enabling classical speculative execution to mask compute latency. 
+As quantum computing enters the Utility Era, realizing near-term advantage relies heavily on Hybrid Variational Quantum Algorithms (VQAs). These algorithms require a tightly coupled, iterative loop between a classical CPU optimizer and a Quantum Processing Unit (QPU). However, current quantum cloud access models rely on decoupled batch-queues that sever this loop, introducing massive Time-to-Next-Shot (TTNS) latency. This delay not only inflates convergence time from minutes to hours but also exposes the computation to quantum hardware drift, degrading algorithmic fidelity and forcing costly system recalibrations. In this paper, we propose \textit{Entangled-FaaS}, a novel serverless middleware designed specifically for hybrid quantum workflows. Entangled-FaaS treats classical parameter optimization and quantum circuit execution as entangled, session-aware events. By implementing a Calibration-Aware placement strategy and a Dual-Resource Fair Queuing scheduler, our architecture routes circuits to QPUs with warm calibration caches and strictly prioritizes active iterative loops. Furthermore, we introduce the ``Quantum Future'' programming abstraction, enabling classical speculative execution to mask compute latency. Across the evaluated baselines, Entangled-FaaS achieves TTNS reductions of 15.3\%--94.3\%, QDC gains of 2.02--15.78 percentage points, and convergence speedups of 83.2\%--98.3\%, while eliminating drift penalties relative to Pilot-Quantum.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -249,8 +249,7 @@ Standard quantum batch jobs lacking an active session flag fall back to standard
 To validate the performance of the Entangled-FaaS architecture, we constructed a comprehensive simulation environment that models the execution of hybrid Variational Quantum Eigensolver (VQE) algorithms across distributed classical and quantum infrastructure.
 
 \textbf{Simulation Methodology and Testbed.}
-Evaluating a unified quantum-classical serverless model requires bridging the execution limits of classical cloud functions with those of quantum hardware. Because deep co-scheduling access is restricted on current public quantum clouds, we developed a discrete-event simulator using SimPy. 
-The simulator replays historical QPU execution logs and queue trace data obtained from the IBM Quantum Network, superimposed with classical function invocation profiles modeled after AWS Lambda. This allows us to precisely track $t_{queue}$, $t_{cpu}$, and $t_{qpu}$ under varying workload densities. The specific hardware and software configurations used for the simulation testbed are detailed in Table \ref{tab:testbed}.
+Evaluating a unified quantum-classical serverless model requires co-scheduling visibility that is difficult to obtain from production cloud control planes. We therefore use a discrete-event simulator implemented with SimPy and instrumented with Qiskit Aer-based quantum evaluations. The simulator models queueing, drift, calibration, pilot startup/overhead, and background traffic explicitly, and records per-iteration TTNS, convergence timing, QDC, and drift penalties. Queue delay is modeled as a high-variance lognormal process ($\mu=3.5,\sigma=0.8$), and background contention is modeled as a Poisson process ($\lambda=0.05$ jobs/s) with exponential QPU service times (mean 5 s). The concrete software environment and core runtime settings are listed in Table \ref{tab:testbed}.
 
 \begin{table}[htbp]
 \caption{Experimental Testbed and Software Environment}
@@ -259,26 +258,31 @@ The simulator replays historical QPU execution logs and queue trace data obtaine
 \begin{tabular}{ll}
 \hline
 \textbf{Component} & \textbf{Specification / Version} \\ \hline
-Classical Orchestrator & Kubernetes v1.28 \\
-FaaS Environment & OpenFaaS (1024MB RAM) \\
-Quantum SDK & Qiskit  \\
-Quantum Simulator & Qiskit Aer  \\
-Trace Data Source & IBM Quantum (Eagle r3, 127-qubit) \\
-Python Version & 3.11.5 \\ \hline
+Simulation Engine & SimPy (discrete-event) \\
+Language Runtime & Python 3.11.x \\
+Quantum SDK & Qiskit \\
+Quantum Primitive & Qiskit Aer Estimator \\
+Queueing Model & Lognormal ($\mu=3.5,\sigma=0.8$) \\
+Background Traffic & Poisson arrivals ($\lambda=0.05$/s) \\
+QPU Pool Size & $N_{QPU}=3$ \\
+Classical Pool Size & $N_{classical}=4$ \\
+Simulation Horizon & $T=3000$ simulated seconds \\ \hline
 \end{tabular}
 \end{table}
 
 \textbf{Workload and Hyperparameters.}
-Our primary benchmark is a VQE algorithm that computes the ground-state energy of a Lithium Hydride (LiH) molecule. The classical optimizer uses Simultaneous Perturbation Stochastic Approximation (SPSA), which is highly robust to quantum noise but requires a large number of iterations (typically $>500$). 
+Our workload is an iterative VQE-style benchmark driven by SPSA with up to 1000 iterations per run. We evaluate eight circuit levels: (i) EfficientSU2 4q/2-rep (simple), (ii) EfficientSU2 6q/3-rep (medium), (iii) EfficientSU2 8q/5-rep (complex), and five additional complex circuits: EfficientSU2 10q/6-rep (full), EfficientSU2 12q/5-rep (linear), RealAmplitudes 10q/7-rep (linear), TwoLocal 10q/6-rep (CZ, full), and TwoLocal 12q/5-rep (CX, linear). For observables, we use a LiH Hamiltonian at 4 qubits and a transverse-field Ising-chain Hamiltonian for larger circuits.
 
-We benchmark Entangled-FaaS against three architectural baselines currently utilized in quantum-cloud ecosystems:
+We benchmark Entangled-FaaS against four architectural baselines currently utilized in quantum-cloud ecosystems:
 \begin{enumerate}
     \item \textbf{Standard Batch-Queue (SBQ):} The default model where each iteration is a discrete job in a FIFO queue.
     \item \textbf{Pure FaaS (PF):} A decoupled model where the optimizer runs statelessly, but quantum jobs enter a standard queue.
     \item \textbf{Static Reservation (SR):} A dedicated access model locking the QPU exclusively for the job's duration.
+    \item \textbf{Pilot-Quantum (PQ):} A pilot-job model with one startup phase followed by low-overhead warm task dispatch.
 \end{enumerate}
 
 The algorithmic and scheduling hyperparameters governing both the VQE payload and the Dual-Resource scheduler are defined in Table \ref{tab:hyperparams}.
+For sensitivity analysis, we sweep $\alpha\in\{0,10,50,100,200\}$, $\beta\in\{0,1,5,10,20\}$, $\gamma\in\{0.1,0.5,1.0,2.0,5.0\}$, and $\tau_{drift}\in\{60,150,300,600,900\}$ while holding other parameters at their default values.
 
 \begin{table}[htbp]
 \caption{Workload and Scheduling Hyperparameters}
@@ -287,13 +291,18 @@ The algorithmic and scheduling hyperparameters governing both the VQE payload an
 \begin{tabular}{lc}
 \hline
 \textbf{Parameter} & \textbf{Value} \\ \hline
-Ansatz Circuit & \texttt{RealAmplitudes} (Depth 4) \\
-Optimizer & SPSA (Max Iterations: 1000) \\
+Workload Family & VQE-style iterative optimization \\
+Circuit Levels & 8 (3 base + 5 extra complex) \\
+Optimizer & SPSA ($\texttt{max\_iter}=1000$) \\
 Shots per Evaluation & 4096 \\
-Drift Threshold ($\tau_{drift}$) & 300 seconds \\
-Session Boost Weight ($\alpha$) & 100.0 \\
-Wait Time Weight ($\beta$) & 5.0 \\
-Fair-Share Weight ($\gamma$) & 1.0 \\ \hline
+Base QPU Time ($t_{qpu}$) & 2.0 s (with $\pm0.3$ s jitter) \\
+Classical Step Time ($t_{cpu}$) & 1.5 s \\
+Network Overhead ($t_{net}$) & 0.5 s \\
+Async Overlap Budget ($t_{async}$) & 0.8 s \\
+Drift Threshold ($\tau_{drift}$) & 300 s \\
+Calibration Penalty ($t_{calib}$) & 30 s \\
+Scheduler Weights ($\alpha,\beta,\gamma$) & (100.0, 5.0, 1.0) \\
+PQ Startup / Warm Overhead & 2.0 s / 0.5 s \\ \hline
 \end{tabular}
 \end{table}
 

@@ -1,4 +1,4 @@
-# EFaaS: A Quantum-Classical Serverless Entangled Scheduler for Hybrid Variational Algorithms
+# Entangled-FaaS Discrete-Event Simulator
 
 This repository simulates hybrid quantum-classical scheduling strategies for iterative variational workloads using a SimPy discrete-event model.
 
@@ -97,7 +97,37 @@ Most useful settings:
 - `N_QPU`, `N_classical`: infrastructure size.
 - `bg_job_arrival_rate`, `bg_t_qpu_mean`: background traffic intensity.
 - `alpha`, `beta`, `gamma`, `tau_drift`: scheduler and drift controls.
+- `QUANTUM_BACKEND`: choose the quantum execution path.
 - `SENSITIVITY_GRIDS`: parameter ranges for sweeps.
+
+Quantum backend options:
+- `aer`: local noisy Qiskit Aer estimator. This is the default and works without IBM credentials.
+- `statevector`: exact noiseless fallback for debugging or baseline comparisons.
+- `ibm_runtime`: IBM Quantum Runtime EstimatorV2 using a saved IBM account or token.
+- `fake_nighthawk`: IBM fake backend with 120 qubits. Best fit here for a 100-qubit-scale test.
+- `fake_washington`: IBM fake backend with 127 qubits. Good for large-device testing.
+- `fake_sherbrooke`: IBM fake backend with 127 qubits. Also good for large-device testing.
+- `fake_toronto`: IBM fake backend with 27 qubits. Good for smaller circuits.
+
+IBM Runtime setup:
+- Install the extra dependency with `pip install -r requirements.txt`.
+- Save your IBM account once with Qiskit Runtime, or provide the usual IBM credentials.
+- Set `QUANTUM_BACKEND = "ibm_runtime"` in `entangled_faas/config.py`.
+- Optionally set `IBM_BACKEND_NAME` to a specific backend, or leave it empty to use the least busy IBM hardware backend with enough qubits.
+- Optionally tune `IBM_PRECISION` and `IBM_RESILIENCE_LEVEL` for runtime execution.
+
+Fake backend setup:
+- Set `QUANTUM_BACKEND = "fake_nighthawk"` for a 100-qubit-scale local test.
+- Use `fake_washington` or `fake_sherbrooke` if you want a 127-qubit fake IBM device.
+- Use `fake_toronto` for smaller circuits or faster tests.
+- If you want to override the backend name explicitly, set `FAKE_BACKEND_NAME` too.
+
+How to use IBM Runtime:
+- Set `QUANTUM_BACKEND = "ibm_runtime"`.
+- Make sure `qiskit-ibm-runtime` is installed.
+- Save your IBM credentials with Qiskit Runtime so the service can load your account.
+- Optionally set `IBM_BACKEND_NAME` to the exact hardware backend you want.
+- Run the simulator from the `entangled_faas/` directory with `python3 main.py`.
 
 Example changes:
 
@@ -130,6 +160,15 @@ alpha = 120.0
 beta = 8.0
 gamma = 1.0
 tau_drift = 240.0
+```
+
+5. Run on IBM Runtime:
+
+```python
+QUANTUM_BACKEND = "ibm_runtime"
+IBM_BACKEND_NAME = None
+IBM_PRECISION = 0.1
+IBM_RESILIENCE_LEVEL = 1
 ```
 
 After changing config, rerun:
