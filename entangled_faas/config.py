@@ -59,9 +59,24 @@ t_pilot_overhead:     float = 0.5   # Pilot-Quantum middleware task latency (s)
 
 # ── Quantum Execution Parameters (Table II) ──────────────────────────────────
 shots:         int   = 4096
-max_iter:      int   = 150      # set to 1000 for full paper experiment
+max_iter:      int   = 1000      # set to 1000 for full paper experiment
 ansatz_reps:   int   = 4
 num_qubits:    int   = 4
+
+# ── Quantum Backend Selection ───────────────────────────────────────────────
+# Valid values:
+#   "aer"           → local noisy Qiskit Aer estimator (default)
+#   "statevector"   → exact noiseless fallback
+#   "ibm_runtime"   → IBM Quantum Runtime EstimatorV2 via saved account / token
+#   "fake_nighthawk"→ local IBM fake backend with 120 qubits
+#   "fake_washington" / "fake_sherbrooke" → local IBM fake backends with 127 qubits
+#   "fake_toronto"   → local IBM fake backend with 27 qubits
+QUANTUM_BACKEND: str = "aer"
+IBM_RUNTIME_CHANNEL: str | None = None
+IBM_BACKEND_NAME: str | None = None
+IBM_PRECISION: float = 0.1
+IBM_RESILIENCE_LEVEL: int = 1
+FAKE_BACKEND_NAME: str | None = None
 
 # ── Timing Model (all in simulated seconds) ───────────────────────────────────
 t_net:       float = 0.5
@@ -106,7 +121,7 @@ LEVEL_SIMPLE  = "Simple (BV-4q)"
 LEVEL_MEDIUM  = "Medium (ESU2-6q)"
 LEVEL_COMPLEX = "Complex (ESU2-8q)"
 
-# Extra complex benchmark circuits (all parameterized, hardware-relevant ansatze)
+# # Extra complex benchmark circuits (all parameterized, hardware-relevant ansatze) (mqt-bench)
 LEVEL_COMPLEX_EFFSU2_10Q_R6_FULL   = "complex_efficientsu2_10q_r6_full"
 LEVEL_COMPLEX_EFFSU2_12Q_R5_LINEAR = "complex_efficientsu2_12q_r5_linear"
 LEVEL_COMPLEX_REALAMP_10Q_R7       = "complex_realamplitudes_10q_r7_linear"
@@ -115,19 +130,37 @@ LEVEL_COMPLEX_TWOLOCAL_12Q_R5_CX   = "complex_twolocal_12q_r5_cx"
 
 ALL_LEVELS = [
     LEVEL_SIMPLE,
-    LEVEL_MEDIUM,
-    LEVEL_COMPLEX,
-    LEVEL_COMPLEX_EFFSU2_10Q_R6_FULL,
-    LEVEL_COMPLEX_EFFSU2_12Q_R5_LINEAR,
-    LEVEL_COMPLEX_REALAMP_10Q_R7,
-    LEVEL_COMPLEX_TWOLOCAL_10Q_R6_CZ,
-    LEVEL_COMPLEX_TWOLOCAL_12Q_R5_CX,
+    # LEVEL_MEDIUM,
+    # LEVEL_COMPLEX,
+    # LEVEL_COMPLEX_EFFSU2_10Q_R6_FULL,
+    # LEVEL_COMPLEX_EFFSU2_12Q_R5_LINEAR,
+    # LEVEL_COMPLEX_REALAMP_10Q_R7,
+    # LEVEL_COMPLEX_TWOLOCAL_10Q_R6_CZ,
+    # LEVEL_COMPLEX_TWOLOCAL_12Q_R5_CX,
 ]
 
 # ── Sensitivity analysis parameter grids ─────────────────────────────────────
+# SENSITIVITY_GRIDS = {
+#     "alpha":     [0.0, 10.0, 50.0, 100.0, 200.0],
+#     "beta":      [0.0, 1.0,  5.0,  10.0,  20.0],
+#     "gamma":     [0.1, 0.5,  1.0,  2.0,   5.0],
+#     "tau_drift": [60.0, 150.0, 300.0, 600.0, 900.0],
+# }
+
+# EFaaS ablation study
+ABLATION_REPEATS: int = 3
+ABLATION_OUTPUT_BASENAME: str = "efaas_ablation"
+
+# Standard circuit catalog controls (used by main.py)
+# CIRCUITS_PER_LEVEL controls how many circuits to use per complexity band.
+# ENABLED_COMPLEXITY_BANDS chooses which groups are run.
+CIRCUITS_PER_LEVEL: int = 10
+# ENABLED_COMPLEXITY_BANDS: list[str] = ["simple", "medium", "complex"]
+ENABLED_COMPLEXITY_BANDS: list[str] = ["simple"]
 SENSITIVITY_GRIDS = {
     "alpha":     [0.0, 10.0, 50.0, 100.0, 200.0],
-    "beta":      [0.0, 1.0,  5.0,  10.0,  20.0],
-    "gamma":     [0.1, 0.5,  1.0,  2.0,   5.0],
+    "beta":      [0.0, 1.0, 5.0, 10.0, 20.0],
+    "gamma":     [0.1, 0.5, 1.0, 2.0, 5.0],
     "tau_drift": [60.0, 150.0, 300.0, 600.0, 900.0],
 }
+

@@ -544,7 +544,8 @@ def plot_circuit_and_average(all_summaries_by_level: Dict[str, List[Dict]], outp
     _set_pub_style()
     os.makedirs(output_dir, exist_ok=True)
 
-    level_tags = [lvl.split(" ")[0] for lvl in config.ALL_LEVELS]
+    levels = list(all_summaries_by_level.keys())
+    level_tags = [lvl.split(" ")[0] for lvl in levels]
     group_labels = level_tags + ["Average"]
     modes = config.ALL_MODES
     mode_labels = [config.MODE_LABELS[m] for m in modes]
@@ -553,7 +554,7 @@ def plot_circuit_and_average(all_summaries_by_level: Dict[str, List[Dict]], outp
     per_mode_ttns = {m: [] for m in modes}
     per_mode_qdc = {m: [] for m in modes}
 
-    for level in config.ALL_LEVELS:
+    for level in levels:
         level_summaries = all_summaries_by_level.get(level, [])
         by_mode = {s["mode"]: s for s in level_summaries}
         for m in modes:
@@ -620,7 +621,7 @@ def plot_circuit_and_average(all_summaries_by_level: Dict[str, List[Dict]], outp
     baseline_modes = [m for m in modes if m != efaas_mode]
     for i, bm in enumerate(baseline_modes):
         vals = []
-        for level in config.ALL_LEVELS:
+        for level in levels:
             level_summaries = {s["mode"]: s for s in all_summaries_by_level.get(level, [])}
             base = level_summaries.get(bm, {})
             ef = level_summaries.get(efaas_mode, {})

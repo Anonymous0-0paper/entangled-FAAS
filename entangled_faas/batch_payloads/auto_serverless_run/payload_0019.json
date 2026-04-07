@@ -1,0 +1,16 @@
+{
+  "mode": "SR",
+  "level": "complex_efficientsu2_10q_r6_full",
+  "seed_offset": 0,
+  "alpha": 100.0,
+  "beta": 5.0,
+  "gamma": 1.0,
+  "tau_drift": 300.0,
+  "verbose": false,
+  "config_overrides": {
+    "SIM_TIME": 1200.0,
+    "max_iter": 300,
+    "QUANTUM_BACKEND": "aer"
+  },
+  "output_filename": "serverless_batch_SR_complex_efficientsu2_10q_r6_full_0"
+}

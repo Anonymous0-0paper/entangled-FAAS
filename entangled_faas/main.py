@@ -20,6 +20,7 @@ import random
 import time
 import json
 import re
+from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -32,6 +33,107 @@ from workload  import VQEJob, BackgroundBatchJobGenerator
 from tracker   import MetricsTracker
 import sensitivity as sens_module
 import plotter
+import ablation
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_standard_circuit_catalog() -> Dict[str, List[dict]]:
+    """
+    Curated, reproducible, standard variational benchmarks.
+    Families are from Qiskit's circuit library and widely used in VQA studies.
+    """
+    return {
+        # 2-5 qubits
+        "simple": [
+            {"level": "std_efficientsu2_2q_r1_linear", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_2q_r2_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_3q_r1_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_3q_r2_linear", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_3q_r3_full", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_4q_r2_cz_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_4q_r3_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_4q_r4_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_5q_r3_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_5q_r4_full", "citation": "Qiskit EfficientSU2"},
+        ],
+        # 6-10 qubits
+        "medium": [
+            {"level": "std_efficientsu2_6q_r2_linear", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_6q_r3_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_6q_r3_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_7q_r3_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_7q_r4_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_8q_r3_cz_full", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_8q_r4_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_9q_r4_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_10q_r4_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_10q_r5_full", "citation": "Qiskit EfficientSU2"},
+        ],
+        # 10-30 qubits
+        "complex": [
+            {"level": "std_efficientsu2_10q_r6_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_12q_r5_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_12q_r5_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_14q_r5_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_16q_r5_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_18q_r4_cz_full", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_20q_r4_linear", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_24q_r3_linear", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_28q_r3_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_30q_r2_linear", "citation": "Qiskit EfficientSU2"},
+        ],
+    }
+
+
+def _select_circuit_levels(circuits_per_level: int, enabled_bands: List[str] | None = None) -> Dict[str, List[dict]]:
+    catalog = _build_standard_circuit_catalog()
+    ordered_bands = ["simple", "medium", "complex"]
+    active_bands = enabled_bands or ordered_bands
+    active_set = {b.strip().lower() for b in active_bands if b.strip()}
+
+    selected = {}
+    for band in ordered_bands:
+        if band not in active_set:
+            continue
+        rows = catalog[band]
+        selected[band] = rows[: max(1, min(circuits_per_level, len(rows)))]
+    return selected
+
+
+def _print_selected_catalog(selected: Dict[str, List[dict]]) -> None:
+    print("\n" + "=" * 65)
+    print("STANDARD CIRCUIT TEST MATRIX (REPRODUCIBLE)")
+    print("Families: EfficientSU2, RealAmplitudes, TwoLocal (Qiskit)")
+    print("=" * 65)
+    for band in ["simple", "medium", "complex"]:
+        rows = selected.get(band, [])
+        if not rows:
+            continue
+        print(f"  {band.upper()} ({len(rows)} circuits)")
+        for r in rows:
+            print(f"    - {r['level']}  [{r['citation']}]")
+    print("=" * 65)
+
+
+def _flatten_levels(selected: Dict[str, List[dict]]) -> List[str]:
+    ordered = []
+    for band in ["simple", "medium", "complex"]:
+        ordered.extend([r["level"] for r in selected.get(band, [])])
+    return ordered
+
+
+def _save_circuit_catalog(selected: Dict[str, List[dict]]) -> str:
+    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    out_path = os.path.join(config.OUTPUT_DIR, "standard_circuit_catalog_for_paper.json")
+    payload = {
+        "note": "Use these circuit families as citations in the paper: Qiskit EfficientSU2, RealAmplitudes, TwoLocal.",
+        "catalog": selected,
+    }
+    with open(out_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"  [catalog] Saved reproducible circuit list -> {out_path}")
+    return out_path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,34 +220,59 @@ def run_simulation(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    circuits_per_level = int(
+        os.getenv("EFAAS_CIRCUITS_PER_LEVEL", str(getattr(config, "CIRCUITS_PER_LEVEL", 10)))
+    )
+
+    config_bands = list(getattr(config, "ENABLED_COMPLEXITY_BANDS", ["simple", "medium", "complex"]))
+    env_bands = os.getenv("EFAAS_COMPLEXITY_BANDS", "").strip()
+    if env_bands:
+        selected_bands = [b.strip().lower() for b in env_bands.split(",") if b.strip()]
+    else:
+        selected_bands = [b.strip().lower() for b in config_bands if b.strip()]
+
+    selected_catalog = _select_circuit_levels(circuits_per_level, selected_bands)
+    selected_levels = _flatten_levels(selected_catalog)
+    if not selected_levels:
+        raise ValueError("No circuit levels selected. Check ENABLED_COMPLEXITY_BANDS or EFAAS_COMPLEXITY_BANDS.")
+
     print("\n" + "=" * 65)
-    print("  ENTANGLED-FaaS DISCRETE-EVENT SIMULATOR  (Extended)")
-    print("  Hybrid Variational Quantum Algorithm Co-Scheduling")
+    print("ENTANGLED-FaaS DISCRETE-EVENT SIMULATOR (Extended)")
+    print("Hybrid Variational Quantum Algorithm Co-Scheduling")
     print("=" * 65)
-    print(f"  Paper: 'Quantum-Classical Serverless: An Entangled Scheduler")
-    print(f"          for Hybrid Variational Algorithms'")
-    print(f"  VQE benchmark : LiH molecule, RealAmplitudes({config.num_qubits}q, "
-          f"reps={config.ansatz_reps})")
-    print(f"  Optimizer     : SPSA (max_iter={config.max_iter})")
-    print(f"  Sim budget    : {config.SIM_TIME:.0f} simulated seconds")
-    print(f"  Queue Trace   : Lognormal Simulation (IBM Eagle r3 equivalent)")
+    print("Paper: Quantum-Classical Serverless: An Entangled Scheduler")
+    print("       for Hybrid Variational Algorithms")
+    print(
+        f"VQE benchmark: LiH molecule, RealAmplitudes({config.num_qubits}q, "
+        f"reps={config.ansatz_reps})"
+    )
+    print(f"Quantum backend: {config.QUANTUM_BACKEND}")
+    print(f"Optimizer: SPSA (max_iter={config.max_iter})")
+    print(f"Sim budget: {config.SIM_TIME:.0f} simulated seconds")
+    print(f"Complexity bands: {', '.join(selected_bands)}")
+    print(f"Circuits per complexity level: {circuits_per_level}")
+    print(f"Total circuit benchmarks: {len(selected_levels)}")
+    print("Queue Trace: Lognormal Simulation (IBM Eagle r3 equivalent)")
     print("=" * 65)
+
+    _print_selected_catalog(selected_catalog)
+    catalog_path = _save_circuit_catalog(selected_catalog)
 
     # ── 1. Run all architectural modes across all levels ──────────────────
     all_summaries_by_level = {}
-    for level in config.ALL_LEVELS:
+    for level in selected_levels:
         print(f"\n\n{'='*65}\n  RUNNING COMPLEXITY LEVEL: {level}\n{'='*65}")
         level_summaries = []
         for offset, mode in enumerate(config.ALL_MODES):
             # Seed offset depends on both mode and level for determinism
-            level_offset = config.ALL_LEVELS.index(level) * 10
+            level_offset = selected_levels.index(level) * 10
             s = run_simulation(mode=mode, seed_offset=offset + level_offset, level=level)
             level_summaries.append(s)
         all_summaries_by_level[level] = level_summaries
 
     # ── 2. Comparative table for the last level ───────────────────────────
     # (Just to show a sample in the console)
-    last_level = config.ALL_LEVELS[-1]
+    last_level = selected_levels[-1]
     MetricsTracker.print_comparison(all_summaries_by_level[last_level])
 
     def _level_tag(level_name: str) -> str:
@@ -174,7 +301,7 @@ def main() -> None:
 
     # ── 2b. Save per-circuit and average report ─────────────────────────
     per_circuit = {}
-    for level in config.ALL_LEVELS:
+    for level in selected_levels:
         level_data = all_summaries_by_level[level]
         tag = _level_tag(level)
         per_mode = {
@@ -208,7 +335,7 @@ def main() -> None:
         label = config.MODE_LABELS.get(mode, mode)
         mode_points = [
             next(s for s in all_summaries_by_level[level] if s.get("mode") == mode)
-            for level in config.ALL_LEVELS
+            for level in selected_levels
         ]
         avg_by_mode[label] = {
             "mean_ttns_s": round(_avg([s.get("mean_ttns_s", 0.0) for s in mode_points]), 4),
@@ -255,8 +382,7 @@ def main() -> None:
             tr = (base_s["mean_ttns_s"] - efaas_s["mean_ttns_s"]) / base_s["mean_ttns_s"] * 100
             print(f"  TTNS reduction        : {tr:+.1f} %")
         
-        print(f"  QDC improvement       : {efaas_s['qdc_pct'] - base_s['qdc_pct']:+.2f} pp")
-        
+            print(f"  VQE benchmark : LiH molecule, RealAmplitudes({config.num_qubits}q, reps={config.ansatz_reps})")
         bd = base_s.get("drift_penalties", 0)
         ed = efaas_s.get("drift_penalties", 0)
         if bd > 0:
@@ -275,8 +401,18 @@ def main() -> None:
     print("  [Step 4] Running hyperparameter sensitivity analysis …")
     sensitivity_results = sens_module.run_sweep()
 
-    # ── 5. Generate publication figures ──────────────────────────────────
-    print("  [Step 5] Generating publication figures …")
+    # ── 5. EFaaS ablation study ──────────────────────────────────────────
+    print("  [Step 5] Running EFaaS ablation study …")
+    ablation_results = ablation.run_efaas_ablation(
+        run_once=run_simulation,
+        levels=selected_levels,
+        repeats=config.ABLATION_REPEATS,
+        output_dir=config.OUTPUT_DIR,
+        figures_dir=config.FIGURES_DIR,
+    )
+
+    # ── 6. Generate publication figures ──────────────────────────────────
+    print("  [Step 6] Generating publication figures …")
     figure_paths = plotter.generate_all_plots(
         summaries        = all_summaries,
         sensitivity_data = sensitivity_results,
@@ -284,12 +420,18 @@ def main() -> None:
         all_summaries_by_level=all_summaries_by_level,
     )
 
-    # ── 6. Final summary ─────────────────────────────────────────────────
+    # ── 7. Final summary ─────────────────────────────────────────────────
     print("\n" + "=" * 65)
     print("  ALL DONE")
     print("=" * 65)
     print(f"  JSON metrics   → {config.OUTPUT_DIR}/")
+    print(f"  Ablation CSV   → {ablation_results['raw_csv']}")
+    print(f"  Ablation CSV   → {ablation_results['summary_csv']}")
+    print(f"  Circuit catalog for paper citations → {catalog_path}")
     print(f"  Figures (PDF + PNG) → {config.FIGURES_DIR}/")
+    for p in ablation_results.get("plots", []):
+        if p:
+            print(f"    {os.path.basename(p)}")
     for p in figure_paths:
         if p:
             print(f"    {os.path.basename(p)}")

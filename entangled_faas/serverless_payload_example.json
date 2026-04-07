@@ -1,0 +1,18 @@
+{
+  "mode": "EFaaS",
+  "level": "Simple (BV-4q)",
+  "seed_offset": 0,
+  "alpha": 100.0,
+  "beta": 5.0,
+  "gamma": 1.0,
+  "tau_drift": 300.0,
+  "verbose": false,
+  "config_overrides": {
+    "QUANTUM_BACKEND": "aer",
+    "SIM_TIME": 1200.0,
+    "max_iter": 200,
+    "N_QPU": 3,
+    "N_classical": 4
+  },
+  "output_filename": "serverless_single_run_result.json"
+}

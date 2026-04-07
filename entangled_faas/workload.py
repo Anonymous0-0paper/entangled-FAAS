@@ -25,6 +25,7 @@ from qiskit.circuit.library import EfficientSU2
 from qiskit.circuit.library import TwoLocal
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.quantum_info import Statevector
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_aer.noise import NoiseModel, depolarizing_error
 from qiskit_aer.primitives import Estimator as AerEstimator
 import qiskit.qasm2 as qasm2
@@ -32,6 +33,19 @@ import os
 
 import config
 from scheduler import EntangledFaaSScheduler, QuantumJob, ClassicalJob
+
+try:
+    from qiskit_ibm_runtime import QiskitRuntimeService, Session
+    from qiskit_ibm_runtime import EstimatorV2 as IBMRuntimeEstimator
+    from qiskit_ibm_runtime.fake_provider import FakeNighthawk, FakeSherbrooke, FakeTorontoV2, FakeWashingtonV2
+except ImportError:
+    QiskitRuntimeService = None
+    Session = None
+    IBMRuntimeEstimator = None
+    FakeNighthawk = None
+    FakeSherbrooke = None
+    FakeTorontoV2 = None
+    FakeWashingtonV2 = None
 
 if TYPE_CHECKING:
     from sim_env import ClassicalCloud, QuantumCloud
@@ -75,6 +89,78 @@ def build_noise_model(drift_factor: float) -> NoiseModel:
     noise_model.add_all_qubit_quantum_error(dp_1q, ["u", "u1", "u2", "u3"])
     noise_model.add_all_qubit_quantum_error(dp_2q, ["cx", "ecr"])
     return noise_model
+
+
+def _backend_kind() -> str:
+    return config.QUANTUM_BACKEND.strip().lower().replace("-", "_")
+
+
+def _is_ibm_backend() -> bool:
+    return _backend_kind() in {"ibm", "ibm_runtime", "runtime", "ibm_quantum"}
+
+
+def _is_fake_backend() -> bool:
+    return _backend_kind().startswith("fake_")
+
+
+def _as_float(value) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, (list, tuple)) and value:
+        return _as_float(value[0])
+    try:
+        return float(np.asarray(value).reshape(-1)[0])
+    except Exception:
+        return float(value)
+
+
+def _create_ibm_service() -> "QiskitRuntimeService":
+    if QiskitRuntimeService is None:
+        raise RuntimeError(
+            "IBM Runtime backend requested, but qiskit-ibm-runtime is not installed. "
+            "Install it with `pip install qiskit-ibm-runtime` and configure an IBM account."
+        )
+
+    service_kwargs = {}
+    if config.IBM_RUNTIME_CHANNEL:
+        service_kwargs["channel"] = config.IBM_RUNTIME_CHANNEL
+    return QiskitRuntimeService(**service_kwargs)
+
+
+def _select_ibm_backend(service: "QiskitRuntimeService", min_qubits: int):
+    backend_name = config.IBM_BACKEND_NAME
+    if backend_name:
+        backend = service.backend(backend_name)
+    else:
+        backend = service.least_busy(operational=True, simulator=False, min_num_qubits=min_qubits)
+
+    if backend.num_qubits < min_qubits:
+        raise RuntimeError(
+            f"IBM backend {backend.name} only exposes {backend.num_qubits} qubits, "
+            f"but the current circuit needs {min_qubits}."
+        )
+    return backend
+
+
+def _create_fake_backend():
+    if FakeNighthawk is None:
+        raise RuntimeError(
+            "Fake IBM backend requested, but qiskit-ibm-runtime is not installed. "
+            "Install it with `pip install qiskit-ibm-runtime`."
+        )
+
+    name = (config.FAKE_BACKEND_NAME or _backend_kind()).strip().lower().replace("-", "_")
+    fake_backends = {
+        "fake_nighthawk": FakeNighthawk,
+        "fake_sherbrooke": FakeSherbrooke,
+        "fake_toronto": FakeTorontoV2,
+        "fake_washington": FakeWashingtonV2,
+    }
+    if name not in fake_backends:
+        raise ValueError(
+            f"Unknown fake backend '{name}'. Choose one of: {', '.join(sorted(fake_backends))}."
+        )
+    return fake_backends[name]()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,8 +276,12 @@ class VQEJob:
                     Source: qiskit.circuit.library.EfficientSU2
                     Emulates deep ansatz circuits used in hardware-efficient VQE.
         """
+        parsed = self._build_circuit_from_spec(level)
+        if parsed is not None:
+            return parsed
+
         if level == config.LEVEL_SIMPLE:
-                        return EfficientSU2(num_qubits=4, reps=2, entanglement="linear")
+            return EfficientSU2(num_qubits=4, reps=2, entanglement="linear")
         elif level == config.LEVEL_MEDIUM:
             # EfficientSU2: 6 qubits, 3 reps, linear entanglement
             # Represents a medium-depth hardware-efficient VQE ansatz
@@ -223,6 +313,47 @@ class VQEJob:
                 reps=5,
             )
         return RealAmplitudes(num_qubits=4, reps=2)
+
+    def _build_circuit_from_spec(self, level: str):
+        """
+        Parse standard circuit specs used by main experiment catalogs.
+
+        Supported formats:
+          - std_efficientsu2_<n>q_r<reps>_<entanglement>
+          - std_realamplitudes_<n>q_r<reps>_<entanglement>
+          - std_twolocal_<n>q_r<reps>_<ent_block>_<entanglement>
+        """
+        lvl = level.strip().lower()
+
+        m = re.fullmatch(r"std_efficientsu2_(\d+)q_r(\d+)_([a-z_]+)", lvl)
+        if m:
+            n_qubits = int(m.group(1))
+            reps = int(m.group(2))
+            ent = m.group(3)
+            return EfficientSU2(num_qubits=n_qubits, reps=reps, entanglement=ent)
+
+        m = re.fullmatch(r"std_realamplitudes_(\d+)q_r(\d+)_([a-z_]+)", lvl)
+        if m:
+            n_qubits = int(m.group(1))
+            reps = int(m.group(2))
+            ent = m.group(3)
+            return RealAmplitudes(num_qubits=n_qubits, reps=reps, entanglement=ent)
+
+        m = re.fullmatch(r"std_twolocal_(\d+)q_r(\d+)_([a-z0-9_]+)_([a-z_]+)", lvl)
+        if m:
+            n_qubits = int(m.group(1))
+            reps = int(m.group(2))
+            ent_block = m.group(3)
+            ent = m.group(4)
+            return TwoLocal(
+                num_qubits=n_qubits,
+                rotation_blocks=["ry", "rz"],
+                entanglement_blocks=ent_block,
+                entanglement=ent,
+                reps=reps,
+            )
+
+        return None
 
     def _build_observable(self, n_qubits: int) -> SparsePauliOp:
         """
@@ -407,17 +538,77 @@ class VQEJob:
 
     def _evaluate_energy(self, qpu_meta: dict) -> tuple[float, float]:
         drift_factor = qpu_meta.get("drift_factor", 0.0)
-        noise_model  = build_noise_model(drift_factor)
+        backend_kind = _backend_kind()
+
+        if backend_kind == "statevector":
+            return self._statevector_fallback()
+
+        if _is_ibm_backend():
+            return self._evaluate_energy_ibm()
+
+        if _is_fake_backend():
+            return self._evaluate_energy_fake()
+
+        noise_model = build_noise_model(drift_factor)
         try:
             estimator = AerEstimator()
             estimator.set_options(shots=config.shots, noise_model=noise_model)
             job_result = estimator.run(
                 [self.ansatz], [self.observable], [self.params]
             ).result()
-            energy   = float(job_result.values[0])
+            energy = float(job_result.values[0])
             variance = float(job_result.metadata[0].get("variance", 0.0))
+            return energy, variance
         except Exception:
-            energy, variance = self._statevector_fallback()
+            return self._statevector_fallback()
+
+    def _evaluate_energy_ibm(self) -> tuple[float, float]:
+        service = _create_ibm_service()
+        backend = _select_ibm_backend(service, self.ansatz.num_qubits)
+
+        bound_circuit = self.ansatz.assign_parameters(self.params, inplace=False)
+        pm = generate_preset_pass_manager(backend=backend, optimization_level=1)
+        isa_circuit = pm.run(bound_circuit)
+        isa_observable = self.observable.apply_layout(isa_circuit.layout)
+
+        with Session(backend=backend) as session:
+            estimator = IBMRuntimeEstimator(mode=session)
+            estimator.options.resilience_level = config.IBM_RESILIENCE_LEVEL
+            job = estimator.run(
+                [(isa_circuit, isa_observable, [self.params.tolist()])],
+                precision=config.IBM_PRECISION,
+            )
+            pub_result = job.result()[0]
+
+        energy = _as_float(pub_result.data.evs)
+        variance = 0.0
+        stds = getattr(pub_result.data, "stds", None)
+        if stds is not None:
+            variance = _as_float(stds) ** 2
+        return energy, variance
+
+    def _evaluate_energy_fake(self) -> tuple[float, float]:
+        backend = _create_fake_backend()
+
+        bound_circuit = self.ansatz.assign_parameters(self.params, inplace=False)
+        pm = generate_preset_pass_manager(backend=backend, optimization_level=1)
+        isa_circuit = pm.run(bound_circuit)
+        isa_observable = self.observable.apply_layout(isa_circuit.layout)
+
+        with Session(backend=backend) as session:
+            estimator = IBMRuntimeEstimator(mode=session)
+            estimator.options.resilience_level = config.IBM_RESILIENCE_LEVEL
+            job = estimator.run(
+                [(isa_circuit, isa_observable, [self.params.tolist()])],
+                precision=config.IBM_PRECISION,
+            )
+            pub_result = job.result()[0]
+
+        energy = _as_float(pub_result.data.evs)
+        variance = 0.0
+        stds = getattr(pub_result.data, "stds", None)
+        if stds is not None:
+            variance = _as_float(stds) ** 2
         return energy, variance
 
     def _statevector_fallback(self) -> tuple[float, float]:

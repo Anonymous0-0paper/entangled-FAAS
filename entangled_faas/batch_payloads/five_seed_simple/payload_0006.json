@@ -1,0 +1,16 @@
+{
+  "mode": "SBQ",
+  "level": "simple_bv_4q",
+  "seed_offset": 1,
+  "alpha": 100.0,
+  "beta": 5.0,
+  "gamma": 1.0,
+  "tau_drift": 300.0,
+  "verbose": false,
+  "config_overrides": {
+    "SIM_TIME": 800.0,
+    "max_iter": 200,
+    "QUANTUM_BACKEND": "aer"
+  },
+  "output_filename": "serverless_batch_SBQ_simple_bv_4q_1"
+}
