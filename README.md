@@ -1,4 +1,4 @@
-# Entangled-FaaS Discrete-Event Simulator
+# EFaaS: A Quantum-Classical Serverless Entangled Scheduler for Hybrid Variational Algorithms
 
 This repository simulates hybrid quantum-classical scheduling strategies for iterative variational workloads using a SimPy discrete-event model.
 
