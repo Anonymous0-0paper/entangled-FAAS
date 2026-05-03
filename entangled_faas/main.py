@@ -70,19 +70,20 @@ def _build_standard_circuit_catalog() -> Dict[str, List[dict]]:
             {"level": "std_twolocal_10q_r4_cx_linear", "citation": "Qiskit TwoLocal"},
             {"level": "std_efficientsu2_10q_r5_full", "citation": "Qiskit EfficientSU2"},
         ],
-        # 10-30 qubits
+        # 10-16 qubits
         "complex": [
-            {"level": "std_efficientsu2_10q_r6_full", "citation": "Qiskit EfficientSU2"},
-            {"level": "std_realamplitudes_12q_r5_linear", "citation": "Qiskit RealAmplitudes"},
-            {"level": "std_twolocal_12q_r5_cx_linear", "citation": "Qiskit TwoLocal"},
-            {"level": "std_efficientsu2_14q_r5_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_efficientsu2_10q_r6_linear", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_10q_r6_full", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_11q_r7_cx_linear", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_11q_r7_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_12q_r5_full", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_12q_r6_cz_full", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_13q_r6_full", "citation": "Qiskit EfficientSU2"},
+            {"level": "std_realamplitudes_13q_r7_full", "citation": "Qiskit RealAmplitudes"},
+            {"level": "std_twolocal_14q_r7_cx_full", "citation": "Qiskit TwoLocal"},
+            {"level": "std_efficientsu2_14q_r8_full", "citation": "Qiskit EfficientSU2"},
             {"level": "std_realamplitudes_16q_r5_linear", "citation": "Qiskit RealAmplitudes"},
-            {"level": "std_twolocal_18q_r4_cz_full", "citation": "Qiskit TwoLocal"},
-            {"level": "std_efficientsu2_20q_r4_linear", "citation": "Qiskit EfficientSU2"},
-            {"level": "std_realamplitudes_24q_r3_linear", "citation": "Qiskit RealAmplitudes"},
-            {"level": "std_twolocal_28q_r3_cx_linear", "citation": "Qiskit TwoLocal"},
-            {"level": "std_efficientsu2_30q_r2_linear", "citation": "Qiskit EfficientSU2"},
-        ],
+            ],
     }
 
 

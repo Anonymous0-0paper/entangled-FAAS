@@ -148,13 +148,13 @@ ALL_LEVELS = [
 # }
 
 # EFaaS ablation study
-ABLATION_REPEATS: int = 3
+ABLATION_REPEATS: int = 1
 ABLATION_OUTPUT_BASENAME: str = "efaas_ablation"
 
 # Standard circuit catalog controls (used by main.py)
 # CIRCUITS_PER_LEVEL controls how many circuits to use per complexity band.
 # ENABLED_COMPLEXITY_BANDS chooses which groups are run.
-CIRCUITS_PER_LEVEL: int = 10
+CIRCUITS_PER_LEVEL: int = 1
 # ENABLED_COMPLEXITY_BANDS: list[str] = ["simple", "medium", "complex"]
 ENABLED_COMPLEXITY_BANDS: list[str] = ["simple"]
 SENSITIVITY_GRIDS = {
