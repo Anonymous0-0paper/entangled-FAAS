@@ -1,4 +1,4 @@
-# EFaaS: A Quantum-Classical Serverless Entangled Scheduler for Hybrid Variational Algorithms
+# Entangled-FaaS Discrete-Event Simulator
 
 This repository simulates hybrid quantum-classical scheduling strategies for iterative variational workloads using a SimPy discrete-event model.
 
@@ -20,6 +20,43 @@ The current setup is configured to stay grounded in realistic execution assumpti
 - Queueing delays sampled from a high-variance lognormal distribution.
 - Physics-based fallback for expectation values using statevector expectation (not synthetic decay curves).
 - Pilot-Quantum modeled as one pilot startup followed by warm task dispatch overhead.
+
+## Circuit Complexity Bands
+
+The simulator and paper evaluation use the same three-band circuit stratification. The table below lists the exact benchmark circuits together with their qubit counts and measured depths.
+
+| Band | Circuit | Qubits | Depth |
+| --- | --- | --- | --- |
+| Simple | std_twolocal_3q_r1_cx_linear | 3 | 6 |
+| Simple | std_efficientsu2_3q_r2_linear | 3 | 10 |
+| Simple | std_realamplitudes_3q_r3_full | 3 | 13 |
+| Simple | std_twolocal_4q_r2_cz_linear | 4 | 11 |
+| Simple | std_efficientsu2_4q_r3_full | 4 | 21 |
+| Simple | std_realamplitudes_4q_r4_linear | 4 | 14 |
+| Simple | std_twolocal_5q_r3_cx_linear | 5 | 16 |
+| Simple | std_efficientsu2_5q_r4_full | 5 | 32 |
+| Medium | std_efficientsu2_6q_r2_linear | 6 | 13 |
+| Medium | std_realamplitudes_6q_r3_linear | 6 | 13 |
+| Medium | std_twolocal_6q_r3_cx_linear | 6 | 17 |
+| Medium | std_efficientsu2_7q_r3_full | 7 | 33 |
+| Medium | std_realamplitudes_7q_r4_linear | 7 | 17 |
+| Medium | std_twolocal_8q_r3_cz_full | 8 | 37 |
+| Medium | std_efficientsu2_8q_r4_full | 8 | 47 |
+| Medium | std_realamplitudes_9q_r4_linear | 9 | 19 |
+| Medium | std_twolocal_10q_r4_cx_linear | 10 | 25 |
+| Medium | std_efficientsu2_10q_r5_full | 10 | 69 |
+| Complex | std_efficientsu2_10q_r6_linear | 10 | 33 |
+| Complex | std_realamplitudes_10q_r6_full | 10 | 74 |
+| Complex | std_twolocal_11q_r7_cx_linear | 11 | 38 |
+| Complex | std_efficientsu2_11q_r7_full | 11 | 101 |
+| Complex | std_realamplitudes_12q_r5_full | 12 | 75 |
+| Complex | std_twolocal_12q_r6_cz_full | 12 | 95 |
+| Complex | std_efficientsu2_13q_r6_full | 13 | 102 |
+| Complex | std_realamplitudes_13q_r7_full | 13 | 109 |
+| Complex | std_twolocal_14q_r7_cx_full | 14 | 125 |
+| Complex | std_efficientsu2_14q_r8_full | 14 | 141 |
+
+This table is the basis for the evaluation-phase discussion in the paper and matches the benchmark list used by the simulator.
 
 ## Project Layout
 
